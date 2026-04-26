@@ -72,6 +72,11 @@ print("\n" + "="*60)
 print("STEP 3: Standardising column names")
 print("="*60)
 
+print("\nColumns in df_pf before renaming:")
+print(df_pf.columns.tolist())
+print("\nColumns in df_aq before renaming:")
+print(df_aq.columns.tolist())
+
 # --- For Property Finder: map possible column names to unified names ---
 pf_col_map = {
     'price': 'unified_price',
@@ -84,6 +89,7 @@ pf_col_map = {
     'bathrooms': 'unified_bathrooms',
     'location': 'unified_location',
     'address': 'unified_location',
+    'location_full': 'unified_location', # ADDED THIS MAPPING
     'property_type': 'unified_property_type',
     'type': 'unified_property_type',
     'amenities': 'unified_amenities',
@@ -102,7 +108,7 @@ aq_col_map = {
     'area': 'unified_area',
     'rooms': 'unified_rooms',
     'bathrooms': 'unified_bathrooms',
-    'location': 'unified_location',
+    # 'location': 'unified_location', # df_aq already has unified_location as a column
     'property_type': 'unified_property_type',
     'amenities': 'unified_amenities',
     # New mappings for additional columns (Aqarmap columns are generally already well-named)
@@ -260,8 +266,6 @@ if 'unified_rooms' in df_merged.columns:
 
 print(f"Shape after cleaning: {df_merged.shape}")
 
-"""##Feature Engineering"""
-
 print("\n" + "="*60)
 print("STEP 6: Feature engineering")
 print("="*60)
@@ -280,7 +284,7 @@ if 'unified_amenities' in df_merged.columns:
 # We build a list of known Egyptian districts (Cairo, Alexandria, Giza, etc.)
 # The function extracts the first matching district from the location string.
 def extract_district(location_str):
-    if pd.isna(location_str):
+    if pd.isna(location_str) or str(location_str).lower() == 'unknown':
         return 'unknown'
     l = str(location_str).lower()
     districts = {
@@ -292,15 +296,30 @@ def extract_district(location_str):
         'sheikh zayed': 'Sheikh Zayed',
         'october 6': '6th October',
         'rehab': 'Rehab City',
-        'madinty': 'Madinaty',
+        'madinaty': 'Madinaty',
+        'new capital city': 'New Capital City',
+        'shorouk city': 'Shorouk City',
+        'mostakbal city': 'Mostakbal City',
         'alexandria': 'Alexandria',
         'smouha': 'Smouha',
         'downtown': 'Downtown Cairo',
         'garden city': 'Garden City',
         'zamalek': 'Zamalek',
-        'mokattam': 'Mokattam'
+        'mokattam': 'Mokattam',
+        'noor city': 'Noor City', # New district
+        'el nozha': 'El Nozha', # New district
+        'badr city': 'Badr City', # New district
+        'al burouj': 'Shorouk City', # Compound in Shorouk City
+        'sarai': 'Mostakbal City', # Compound in Mostakbal City
+        'tag sultan': 'New Cairo', # Specific location from 'Other'
+        'reve du nil': 'Maadi', # Specific location from 'Other'
+        'uptown cairo': 'Mokattam', # Specific location from 'Other'
+        'palm resort 1': 'Shorouk City', # Specific location from 'Other'
+        'el manial': 'El Manial' # Specific location from 'Other'
     }
-    for key, val in districts.items():
+    # Sort keys by length in descending order to match more specific districts first
+    sorted_districts = sorted(districts.items(), key=lambda item: len(item[0]), reverse=True)
+    for key, val in sorted_districts:
         if key in l:
             return val
     return 'Other'
@@ -318,12 +337,19 @@ yield_table = {
     '6th October': 8.0,
     'Rehab City': 7.8,
     'Madinaty': 7.5,
+    'New Capital City': 7.0,
+    'Shorouk City': 6.8,
+    'Mostakbal City': 7.0,
     'Alexandria': 6.5,
     'Smouha': 7.0,
     'Downtown Cairo': 5.5,
     'Garden City': 5.0,
     'Zamalek': 5.5,
     'Mokattam': 6.0,
+    'Noor City': 7.0, # New entry
+    'El Nozha': 6.8, # New entry
+    'Badr City': 6.5, # New entry
+    'El Manial': 7.0, # New entry for El Manial district
     'Other': 6.5,
     'unknown': 6.5
 }
@@ -334,6 +360,34 @@ df_merged['estimated_roi_percent'] = df_merged['gross_rental_yield_pct']   # ROI
 
 # (Optional) Monthly rent estimate
 df_merged['estimated_monthly_rent'] = df_merged['estimated_annual_rent'] / 12
+
+print("\n" + "="*60)
+print("Top 50 District Value Counts after further update")
+print("="*60)
+print(df_merged['district'].value_counts(dropna=False).head(50).to_string())
+
+print("\n" + "="*60)
+print("Top 50 District Value Counts after update")
+print("="*60)
+print(df_merged['district'].value_counts(dropna=False).head(50).to_string())
+
+print("\n" + "="*60)
+print("Top unified_location values for 'Other' districts")
+print("="*60)
+
+# Filter df_merged to show only entries where district is 'Other'
+other_districts_locations = df_merged[df_merged['district'] == 'Other']['unified_location']
+
+# Display the top unique values in these locations
+print(other_districts_locations.value_counts(dropna=False).head(50).to_string())
+
+print("\n" + "="*60)
+print("Top unified_location values before district extraction")
+print("="*60)
+
+# Display the top 50 unique values in unified_location and their counts
+# This is df_merged after cleaning, but before the district extraction in STEP 6
+print(df_merged['unified_location'].value_counts(dropna=False).head(50).to_string())
 
 """##Additional Metrics (for dashboard)"""
 
@@ -381,3 +435,52 @@ for col in df_final.columns:
 
 schema_df = pd.DataFrame(schema_info, columns=['Column Name', 'Data Type', 'Non\u2011Null Count', 'Example Value'])
 print(schema_df.to_string(index=False))
+
+"""### Examining Original Location Data from `df_pf` and `df_aq`
+
+To understand why many `unified_location` values became 'unknown' and `district` became 'Other', let's look at the raw location data in the original `df_pf` (Property Finder) and `df_aq` (Aqarmap) DataFrames. This will show us the content before any cleaning or standardization was applied.
+"""
+
+print("\n" + "="*60)
+print("Original Location Columns in Property Finder (df_pf)")
+print("="*60)
+
+# Identify potential location columns in df_pf based on pf_col_map
+pf_location_cols = [k for k, v in pf_col_map.items() if v == 'unified_location' and k in df_pf.columns]
+
+if pf_location_cols:
+    print(df_pf[pf_location_cols].head(10).to_string())
+    print("\nValue counts for original Property Finder location columns (top 20 with NaNs):")
+    for col in pf_location_cols:
+        print(f"\n--- {col} ---")
+        print(df_pf[col].value_counts(dropna=False).head(20).to_string())
+else:
+    print("No original location columns found in df_pf based on pf_col_map.")
+
+print("\n" + "="*60)
+print("Original Location Column in Aqarmap (df_aq)")
+print("="*60)
+
+# Identify potential location columns in df_aq based on aq_col_map
+aq_location_cols = [k for k, v in aq_col_map.items() if v == 'unified_location' and k in df_aq.columns]
+
+if aq_location_cols:
+    print(df_aq[aq_location_cols].head(10).to_string())
+    print("\nValue counts for original Aqarmap location column (top 20 with NaNs):")
+    for col in aq_location_cols:
+        print(f"\n--- {col} ---")
+        print(df_aq[col].value_counts(dropna=False).head(20).to_string())
+else:
+    print("No original location columns found in df_aq based on aq_col_map.")
+
+"""From the original data, you might notice:
+
+*   **Missing Values (NaNs)**: A significant number of entries might be `NaN` in the original location columns. These would directly become 'unknown' during the cleaning step.
+*   **Varying Granularity/Specificity**: Some entries might be very general (e.g., 'Egypt'), while others are more specific. The `extract_district` function is designed to match specific, well-known districts. Any location string that doesn't contain one of these predefined district names will result in the 'Other' category.
+*   **Inconsistent Formatting**: Even if a location is relevant, inconsistent spelling, extra characters, or different languages could prevent it from matching the predefined district list, leading to 'Other'.
+
+This inspection helps to confirm whether the 'unknown' and 'Other' values are due to genuinely missing or unidentifiable data in the source files, or issues with the district extraction logic.
+"""
+
+
+
