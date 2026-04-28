@@ -6,3 +6,4 @@ scipy
 pathlib
 xgboost
 scikit-learn
+pickle5
