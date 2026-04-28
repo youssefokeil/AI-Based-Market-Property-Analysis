@@ -4,5 +4,5 @@ numpy
 pandas
 scipy
 pathlib
-torch
+xgboost
 scikit-learn
