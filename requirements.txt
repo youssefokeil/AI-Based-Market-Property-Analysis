@@ -4,3 +4,5 @@ numpy
 pandas
 scipy
 pathlib
+torch
+scikit-learn
